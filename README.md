@@ -1,2 +1,2 @@
 # bear-cli
-Baer minimum tool based cli client for your local ai
+Baer minimum tool based cli client for your local ai.
