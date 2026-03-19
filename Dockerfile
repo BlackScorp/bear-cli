@@ -1,17 +1,9 @@
-FROM alpine:latest
+
+FROM alpine:latest AS builder
 
 RUN apk add --no-cache \
   go \
-  git \
-  ripgrep \
-  fd \
-  jq \
-  curl \
-  tree \
-  bat \
-  htmlq \
   build-base
-
 
 WORKDIR /app
 
@@ -20,8 +12,25 @@ ENV CGO_ENABLED=0
 
 COPY . .
 
-RUN go mod init baer && go mod tidy && go build -o /usr/local/bin/baer-cli ./src
+RUN go mod init baer || true
+RUN go mod tidy
+RUN go build -o baer-cli ./src
+
+
+FROM alpine:latest
+
+RUN apk add --no-cache \
+  git \
+  ripgrep \
+  fd \
+  jq \
+  curl \
+  tree \
+  bat \
+  htmlq
 
 WORKDIR /project
+
+COPY --from=builder /app/baer-cli /usr/local/bin/baer-cli
 
 ENTRYPOINT ["baer-cli"]
