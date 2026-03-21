@@ -11,8 +11,12 @@ func runSetup() error {
 	s := bufio.NewScanner(os.Stdin)
 
 	fmt.Print("LLM URL (http://localhost:11434): ")
-	s.Scan()
-	url := strings.TrimSpace(s.Text())
+	
+	url, err := readLine(s)
+	if err != nil {
+		return fmt.Errorf("setup requires interactive input")
+	}
+
 	if url == "" {
 		url = "http://127.0.0.1:11434"
 	}
@@ -56,7 +60,12 @@ func runSetup() error {
 
 	return saveProfile(p)
 }
-
+func readLine(s *bufio.Scanner) (string, error) {
+	if !s.Scan() {
+		return "", fmt.Errorf("no input available")
+	}
+	return strings.TrimSpace(s.Text()), nil
+}
 
 func ensureDirs() {
 	os.MkdirAll(profileDir, 0755)
@@ -69,4 +78,24 @@ func must(err error) {
 		fmt.Println("fatal:", err)
 		os.Exit(1)
 	}
+}
+func hasTTY() bool {
+	return isTerminal(os.Stdin) && isTerminal(os.Stdout)
+}
+
+func isTerminal(f *os.File) bool {
+	fi, err := f.Stat()
+	if err != nil {
+		return false
+	}
+	return (fi.Mode() & os.ModeCharDevice) != 0
+}
+func isStdinAvailable() bool {
+	fi, err := os.Stdin.Stat()
+	if err != nil {
+		return false
+	}
+
+	
+	return (fi.Mode() & os.ModeCharDevice) != 0
 }

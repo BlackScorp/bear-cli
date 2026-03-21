@@ -14,6 +14,12 @@ func chatLoop() {
 	s := bufio.NewScanner(os.Stdin)
 
 	for {
+		if !isStdinAvailable() {
+		
+			time.Sleep(time.Second) 
+			continue
+		}
+		
 		fmt.Print("> ")
 		s.Scan()
 		input := s.Text()
@@ -73,4 +79,18 @@ func buildSystemPrompt() string {
 	sb.WriteString("\nReturn ONLY JSON when calling tools.\n")
 
 	return sb.String()
+}
+
+
+func handleCommand(cmd string) {
+	parts := strings.Split(cmd, " ")
+
+	switch parts[0] {
+	case "/exit":
+		os.Exit(0)
+	case "/history":
+		showHistory()
+	default:
+		fmt.Println("unknown command")
+	}
 }

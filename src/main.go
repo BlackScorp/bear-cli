@@ -2,8 +2,7 @@ package main
 
 import (
 	"fmt"
-	"os"
-	"strings"
+	"time"
 )
 
 var currentProfile Profile
@@ -14,26 +13,22 @@ func main() {
 	ensureDirs()
 
 	if !profileExists("default") {
+		if !hasTTY() {
+			fmt.Println("No TTY detected. Running in idle mode...")
+
+			for {
+				time.Sleep(10 * time.Second)
+			}
+		}
 		must(runSetup())
 	}
 
 	must(loadProfile("default"))
 	must(loadTools())
 
-	chatLoop()
+	
+	
+chatLoop()
+	
 }
 
-
-
-func handleCommand(cmd string) {
-	parts := strings.Split(cmd, " ")
-
-	switch parts[0] {
-	case "/exit":
-		os.Exit(0)
-	case "/history":
-		showHistory()
-	default:
-		fmt.Println("unknown command")
-	}
-}
