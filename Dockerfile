@@ -11,7 +11,7 @@ ENV GO111MODULE=on
 ENV CGO_ENABLED=0
 
 COPY . .
-
+RUN ls -la ./src
 RUN go mod init baer || true
 RUN go mod tidy
 RUN go build -o baer-cli ./src

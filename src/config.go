@@ -6,6 +6,7 @@ import (
 )
 
 var (
+	cwd string
 	baseDir    string
 	profileDir string
 	toolsDir   string
@@ -17,7 +18,7 @@ func init() {
 	if err != nil {
 		panic(err)
 	}
-
+	
 	baseDir = filepath.Join(cwd, ".bear")
 	profileDir = filepath.Join(baseDir, "profiles")
 	toolsDir = filepath.Join(baseDir, "tools")

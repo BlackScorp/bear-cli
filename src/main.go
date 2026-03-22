@@ -12,14 +12,16 @@ var loadedTools = map[string]Tool{}
 func main() {
 	ensureDirs()
 
-	if !profileExists("default") {
-		if !hasTTY() {
+if !hasTTY() {
 			fmt.Println("No TTY detected. Running in idle mode...")
 
 			for {
 				time.Sleep(10 * time.Second)
 			}
 		}
+		
+	if !profileExists("default") {
+		
 		must(runSetup())
 	}
 
@@ -29,6 +31,8 @@ func main() {
 	
 	
 chatLoop()
+	
+
 	
 }
 

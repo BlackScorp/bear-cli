@@ -4,8 +4,9 @@ import (
 	"path/filepath"
 	"strings"
 	"encoding/json"
-	"errors"
 	"time"
+	"log"
+	"fmt"
 	"context"
 	"os/exec"
 )
@@ -52,26 +53,64 @@ func loadTools() error {
 func runTool(name string, args map[string]string) (string, error) {
 	tool, ok := loadedTools[name]
 	if !ok {
-		return "", errors.New("tool not found")
+		log.Printf("[Tool] ❌ tool not found: %s\n", name)
+		return "", fmt.Errorf("tool not found: %s", name)
 	}
 
+	// build args in defined order
+	var cmdArgs []string
+	for _, argName := range tool.Arguments {
+		val, ok := args[argName]
+		if !ok {
+			errMsg := fmt.Sprintf("missing argument: %s", argName)
+			log.Printf("[Tool] ❌ %s\n", errMsg)
+			return "", fmt.Errorf(errMsg)
+		}
+		cmdArgs = append(cmdArgs, val)
+	}
+
+	// Debug: what will be executed
+	log.Printf("[Tool] 🛠 Running: %s %v\n", tool.Exec, cmdArgs)
+
+	// run with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	var cmdArgs []string
-	for _, a := range tool.Arguments {
-		cmdArgs = append(cmdArgs, args[a])
-	}
-
 	cmd := exec.CommandContext(ctx, tool.Exec, cmdArgs...)
 	out, err := cmd.CombinedOutput()
-	return string(out), err
+
+	// Debug: Raw tool output
+	log.Printf("[Tool] 📤 Output: %s\n", string(out))
+
+	if err != nil {
+		// Debug: Error info
+		log.Printf("[Tool] ❗ Error: %v\n", err)
+		return string(out), err
+	}
+
+	log.Printf("[Tool] ✅ Success\n")
+
+	return string(out), nil
 }
 
 func tryParseTool(resp string) (ToolCall, bool) {
 	var tc ToolCall
-	if json.Unmarshal([]byte(resp), &tc) == nil && tc.Tool != "" {
+
+	clean := cleanJSON(resp)
+
+	if json.Unmarshal([]byte(clean), &tc) == nil && tc.Tool != "" {
 		return tc, true
 	}
 	return tc, false
+}
+
+func cleanJSON(input string) string {
+	input = strings.TrimSpace(input)
+
+	// remove markdown fences if present
+	input = strings.TrimPrefix(input, "```json")
+	input = strings.TrimPrefix(input, "```")
+	input = strings.TrimSuffix(input, "```")
+
+	return strings.TrimSpace(input)
 }
