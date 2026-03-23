@@ -10,7 +10,8 @@ import (
 	"text/template"
 	"embed"
 )
-//go:embed *.md
+
+//go:embed prompts/*.md
 var promptFS embed.FS
 
 func chatLoop() {
@@ -32,14 +33,24 @@ func chatLoop() {
 			continue
 		}
 
-		// Try tool call
-		if tc, ok := tryParseTool(resp); ok {
-			result, err := runTool(tc.Tool, tc.Arguments)
+		for {
+			cmd, ok := extractCommand(resp)
+			if !ok {
+				break 
+			}
+
+			result, err := runCommand(cmd)
 			if err != nil {
 				result = err.Error()
 			}
+			result = limitOutput(result)
 
-			resp, _ = askLLM("Tool result:\n" + result)
+		
+			resp, err = askLLM("Command output:\n" + result)
+			if err != nil {
+				fmt.Println("error:", err)
+				break
+			}
 		}
 
 		fmt.Println(resp)
@@ -48,7 +59,7 @@ func chatLoop() {
 }
 
 func saveChat(input, resp string) {
-	file := filepath.Join(chatsDir, time.Now().Format("2006-01-02")+".md")
+	file := filepath.Join(personaChatsDir(currentProfile.Name), time.Now().Format("2006-01-02")+".md")
 
 	f, _ := os.OpenFile(file, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	defer f.Close()
@@ -57,14 +68,14 @@ func saveChat(input, resp string) {
 }
 
 func showHistory() {
-	files, _ := os.ReadDir(chatsDir)
+	files, _ := os.ReadDir(personaChatsDir(currentProfile.Name))
 	for _, f := range files {
 		fmt.Println(f.Name())
 	}
 }
 
 func loadSystemPromptTemplate() (string, error) {
-	data, err := promptFS.ReadFile("system_prompt.md")
+	data, err := promptFS.ReadFile("prompts/system.md")
 	if err != nil {
 		return "", err
 	}
@@ -88,7 +99,7 @@ func buildSystemPrompt() string {
 	data := map[string]interface{}{
 		"BasePrompt": currentProfile.BasePrompt,
 		"CWD":        cwd,
-		"Tools":      buildToolsString(),
+		"Tools":      buildToolsPrompt(),
 	}
 
 	var out strings.Builder
@@ -100,15 +111,6 @@ func buildSystemPrompt() string {
 	return out.String()
 }
 
-func buildToolsString() string {
-	var sb strings.Builder
-
-	for _, t := range loadedTools {
-		sb.WriteString(fmt.Sprintf("- %s(%v): %s\n", t.Name, t.Arguments, t.Description))
-	}
-
-	return sb.String()
-}
 
 func handleCommand(cmd string) {
 	parts := strings.Split(cmd, " ")
@@ -121,4 +123,11 @@ func handleCommand(cmd string) {
 	default:
 		fmt.Println("unknown command")
 	}
+}
+
+func limitOutput(s string) string {
+	if len(s) > 2000 {
+		return s[:2000] + "\n...[truncated]"
+	}
+	return s
 }

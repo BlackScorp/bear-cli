@@ -1,116 +1,90 @@
 package main
+
 import (
+	"embed"
 	"os"
 	"path/filepath"
 	"strings"
-	"encoding/json"
 	"time"
-	"log"
-	"fmt"
 	"context"
 	"os/exec"
+	"log"
 )
 
-type Tool struct {
-	Name        string   `json:"name"`
-	Description string   `json:"description"`
-	Exec        string   `json:"exec"`
-	Arguments   []string `json:"arguments"`
-	File        string   `json:"-"` // internal: filename source
-}
 
-type ToolCall struct {
-	Tool      string            `json:"tool"`
-	Arguments map[string]string `json:"arguments"`
-}
 
-func loadTools() error {
-	files, err := os.ReadDir(toolsDir)
+//go:embed tools/*.md
+var toolTemplates embed.FS
+
+func installTool(toolName, targetDir string) error {
+	data, err := toolTemplates.ReadFile("tools/" + toolName)
 	if err != nil {
 		return err
 	}
+	path := filepath.Join(targetDir, toolName)
+	return os.WriteFile(path, data, 0644)
+}
 
+func listEmbeddedTools() ([]string, error) {
+	files, err := toolTemplates.ReadDir("tools")
+	if err != nil {
+		return nil, err
+	}
+	var names []string
 	for _, f := range files {
-		if !strings.HasSuffix(f.Name(), ".json") {
+		names = append(names, f.Name())
+	}
+	return names, nil
+}
+
+func loadTools() ([]string, error) {
+	dir := personaToolsDir(currentProfile.Name)
+	files, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	var tools []string
+	for _, f := range files {
+		if !strings.HasSuffix(f.Name(), ".md") {
 			continue
 		}
-
-		data, err := os.ReadFile(filepath.Join(toolsDir, f.Name()))
+		data, err := os.ReadFile(filepath.Join(dir, f.Name()))
 		if err != nil {
 			continue
 		}
-
-		var t Tool
-		if err := json.Unmarshal(data, &t); err != nil {
-			continue
-		}
-
-		loadedTools[t.Name] = t
+		tools = append(tools, string(data))
 	}
-	return nil
+	return tools, nil
 }
 
-func runTool(name string, args map[string]string) (string, error) {
-	tool, ok := loadedTools[name]
-	if !ok {
-		log.Printf("[Tool] ❌ tool not found: %s\n", name)
-		return "", fmt.Errorf("tool not found: %s", name)
+func buildToolsPrompt() string {
+	tools, err := loadTools()
+	if err != nil || len(tools) == 0 {
+		return ""
 	}
+	return strings.Join(tools, "\n\n")
+}
 
-	// build args in defined order
-	var cmdArgs []string
-	for _, argName := range tool.Arguments {
-		val, ok := args[argName]
-		if !ok {
-			errMsg := fmt.Sprintf("missing argument: %s", argName)
-			log.Printf("[Tool] ❌ %s\n", errMsg)
-			return "", fmt.Errorf(errMsg)
+func extractCommand(resp string) (string, bool) {
+	resp = strings.TrimSpace(resp)
+	if strings.Contains(resp, "```bash") {
+		start := strings.Index(resp, "```bash") + len("```bash")
+		end := strings.Index(resp[start:], "```")
+		if end == -1 {
+			return "", false
 		}
-		cmdArgs = append(cmdArgs, val)
+		cmd := resp[start : start+end]
+		return strings.TrimSpace(cmd), true
 	}
+	return "", false
+}
 
-	// Debug: what will be executed
-	log.Printf("[Tool] 🛠 Running: %s %v\n", tool.Exec, cmdArgs)
-
-	// run with timeout
+func runCommand(command string) (string, error) {
+	log.Println("[CMD] Running:", command)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-
-	cmd := exec.CommandContext(ctx, tool.Exec, cmdArgs...)
+	cmd := exec.CommandContext(ctx, "sh", "-c", command)
 	out, err := cmd.CombinedOutput()
-
-	// Debug: Raw tool output
-	log.Printf("[Tool] 📤 Output: %s\n", string(out))
-
-	if err != nil {
-		// Debug: Error info
-		log.Printf("[Tool] ❗ Error: %v\n", err)
-		return string(out), err
-	}
-
-	log.Printf("[Tool] ✅ Success\n")
-
-	return string(out), nil
-}
-
-func tryParseTool(resp string) (ToolCall, bool) {
-	var tc ToolCall
-
-	clean := cleanJSON(resp)
-
-	if json.Unmarshal([]byte(clean), &tc) == nil && tc.Tool != "" {
-		return tc, true
-	}
-	return tc, false
-}
-
-func cleanJSON(input string) string {
-	input = strings.TrimSpace(input)
-
-	// remove markdown fences if present
-	input = strings.TrimPrefix(input, "```json")
-	input = strings.TrimPrefix(input, "```")
-	input = strings.TrimSuffix(input, "```")
-
-	return strings.TrimSpace(input)
+	log.Println("[CMD] Output:", string(out))
+	return string(out), err
 }

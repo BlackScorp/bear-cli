@@ -2,7 +2,6 @@ package main
 
 import (
 	"os"
-	"path/filepath"
 	"encoding/json"
 )
 type Profile struct {
@@ -15,20 +14,26 @@ type Profile struct {
 
 
 func profileExists(name string) bool {
-	_, err := os.Stat(filepath.Join(profileDir, name+".json"))
+	_, err := os.Stat(personaConfigPath(name))
 	return err == nil
 }
 
 func saveProfile(p Profile) error {
+	err := os.MkdirAll(personaDir(p.Name), 0755)
+	if err != nil {
+		return err
+	}
+
 	data, err := json.MarshalIndent(p, "", "  ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(profileDir, p.Name+".json"), data, 0644)
+
+	return os.WriteFile(personaConfigPath(p.Name), data, 0644)
 }
 
 func loadProfile(name string) error {
-	data, err := os.ReadFile(filepath.Join(profileDir, name+".json"))
+	data, err := os.ReadFile(personaConfigPath(name))
 	if err != nil {
 		return err
 	}

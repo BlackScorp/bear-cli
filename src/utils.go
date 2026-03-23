@@ -5,13 +5,14 @@ import (
 	"fmt"
 	"strings"
 	"bufio"
+	"path/filepath"
+	"strconv"
 )
 
 func runSetup() error {
 	s := bufio.NewScanner(os.Stdin)
 
 	fmt.Print("LLM URL (http://localhost:11434): ")
-	
 	url, err := readLine(s)
 	if err != nil {
 		return fmt.Errorf("setup requires interactive input")
@@ -46,20 +47,76 @@ func runSetup() error {
 		name = "default"
 	}
 
+
+	personaPath, err := createPersonaDirs(name)
+	if err != nil {
+		return err
+	}
+
+	
+	tools, _ := listEmbeddedTools()
+
+	fmt.Println("Available tools:")
+	for i, t := range tools {
+		fmt.Printf("%d: %s\n", i, t)
+	}
+
+	fmt.Print("Select tools (comma separated, empty = none e.g. 0,1,4): ")
+	s.Scan()
+	selection := strings.Split(s.Text(), ",")
+
+	var selectedTools []string
+
+	for _, sel := range selection {
+		sel = strings.TrimSpace(sel)
+		if sel == "" {
+			continue
+		}
+
+		i, err := strconv.Atoi(sel)
+		if err != nil || i < 0 || i >= len(tools) {
+			continue
+		}
+
+		toolName := tools[i]
+
+		err = installTool(toolName, filepath.Join(personaPath, "tools"))
+		if err == nil {
+			selectedTools = append(selectedTools, toolName)
+		}
+	}
+
 	fmt.Print("Base prompt (optional): ")
 	s.Scan()
 	basePrompt := s.Text()
 
 	p := Profile{
 		Name:       name,
-		LLMURL:  url,
+		LLMURL:     url,
 		Model:      models[idx],
-		Tools:      []string{},
+		Tools:      selectedTools,
 		BasePrompt: basePrompt,
 	}
 
 	return saveProfile(p)
 }
+
+func createPersonaDirs(name string) (string, error) {
+	personaPath := filepath.Join(baseDir, "personas", name)
+
+	err := os.MkdirAll(filepath.Join(personaPath, "tools"), 0755)
+	if err != nil {
+		return "", err
+	}
+
+	err = os.MkdirAll(filepath.Join(personaPath, "chats"), 0755)
+	if err != nil {
+		return "", err
+	}
+
+	return personaPath, nil
+}
+
 func readLine(s *bufio.Scanner) (string, error) {
 	if !s.Scan() {
 		return "", fmt.Errorf("no input available")
@@ -67,11 +124,7 @@ func readLine(s *bufio.Scanner) (string, error) {
 	return strings.TrimSpace(s.Text()), nil
 }
 
-func ensureDirs() {
-	os.MkdirAll(profileDir, 0755)
-	os.MkdirAll(toolsDir, 0755)
-	os.MkdirAll(chatsDir, 0755)
-}
+
 
 func must(err error) {
 	if err != nil {
